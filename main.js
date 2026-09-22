@@ -1,4 +1,5 @@
 // ===== GLOBAL VARIABLES =====
+const GROQ_API_KEY = ""; // Replace with your Groq API key
 let selectedFile = null;
 let enquiryImageData = null;
 let isPhotoUploaded = false;
@@ -7,7 +8,7 @@ let currentYear = new Date().getFullYear();
 let machineryImageData = null;
 
 // ===== PAGE NAVIGATION =====
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     initializeNavigation();
     initializeEnquiryForm();
     initializeCalendar();
@@ -17,24 +18,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeNavigation() {
     const navLinks = document.querySelectorAll('.nav-menu a');
-    
+
     navLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
+        link.addEventListener('click', function (e) {
             e.preventDefault();
-            
+
             const targetPage = this.getAttribute('href').substring(1);
-            
+
             document.querySelectorAll('.page').forEach(page => {
                 page.classList.remove('active');
             });
-            
+
             navLinks.forEach(navLink => {
                 navLink.classList.remove('active');
             });
-            
+
             this.classList.add('active');
             document.getElementById(targetPage).classList.add('active');
-            
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     });
@@ -47,29 +48,29 @@ function initializeEnquiryForm() {
     const previewImage = document.getElementById('previewImage');
     const uploadControls = document.getElementById('uploadControls');
     const contactForm = document.getElementById('contactForm');
-    
+
     if (uploadBox) {
-        uploadBox.addEventListener('click', function() {
+        uploadBox.addEventListener('click', function () {
             fileInput.click();
         });
     }
-    
+
     if (fileInput) {
         fileInput.addEventListener('change', previewFile);
     }
-    
+
     const uploadBtn = document.querySelector('.upload-btn');
     if (uploadBtn) {
         uploadBtn.addEventListener('click', uploadPhoto);
     }
-    
+
     const changeBtn = document.querySelector('.change-btn');
     if (changeBtn) {
-        changeBtn.addEventListener('click', function() {
+        changeBtn.addEventListener('click', function () {
             fileInput.click();
         });
     }
-    
+
     if (contactForm) {
         contactForm.addEventListener('submit', handleFormSubmit);
     }
@@ -82,25 +83,25 @@ function previewFile() {
 
     if (file) {
         selectedFile = file;
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             enquiryImageData = e.target.result;
             const preview = document.getElementById('previewImage');
             const uploadBox = document.getElementById('uploadBox');
             const uploadControls = document.getElementById('uploadControls');
-            
+
             preview.src = enquiryImageData;
             preview.classList.add('show');
             uploadBox.classList.add('has-image');
             uploadControls.classList.add('show');
-            
+
             const uploadIcon = uploadBox.querySelector('.upload-icon');
             const uploadText = uploadBox.querySelector('.upload-text');
             const uploadHint = uploadBox.querySelector('.upload-hint');
-            
+
             if (uploadIcon) uploadIcon.style.display = 'none';
             if (uploadText) uploadText.style.display = 'none';
             if (uploadHint) uploadHint.style.display = 'none';
-            
+
             isPhotoUploaded = false;
         }
         reader.readAsDataURL(file);
@@ -110,13 +111,13 @@ function previewFile() {
 function uploadPhoto() {
     if (selectedFile) {
         isPhotoUploaded = true;
-        
+
         const uploadBtn = document.querySelector('.upload-btn');
         if (uploadBtn) {
             uploadBtn.textContent = 'Photo Uploaded ✓';
             uploadBtn.style.background = '#4a7c2c';
         }
-        
+
         setTimeout(() => {
             alert('Photo uploaded successfully! You can now submit your enquiry.');
         }, 300);
@@ -125,43 +126,105 @@ function uploadPhoto() {
 
 function handleFormSubmit(e) {
     e.preventDefault();
-    
+
     if (selectedFile && !isPhotoUploaded) {
         alert('Please upload the photo before submitting the form.');
         return;
     }
-    
+
     const message = document.getElementById('message').value;
-    
+
     // Show response with image and information
     displayEnquiryResponse(enquiryImageData, message);
-    
+
     // Reset form
     e.target.reset();
     resetPhotoUpload();
 }
 
-function displayEnquiryResponse(imageData, query) {
+async function displayEnquiryResponse(imageData, query) {
     // Create response container
     let responseContainer = document.getElementById('enquiry-response-container');
-    
+
     if (!responseContainer) {
         responseContainer = document.createElement('div');
         responseContainer.id = 'enquiry-response-container';
         responseContainer.className = 'enquiry-response-container';
-        
+
         const enquiryContainer = document.querySelector('.enquiry-container');
         const adSpace = enquiryContainer.querySelector('.ad-space');
         enquiryContainer.insertBefore(responseContainer, adSpace);
     }
-    
-    // Generate mock response based on query
-    const response = generateMockResponse(query);
-    
+
+    // Render loading state
+    responseContainer.innerHTML = `
+        <div class="response-card loading-card" style="padding: 30px; text-align: center; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-top: 20px;">
+            <h2 style="color: #2c5e1a; margin-bottom: 15px; font-size: 1.4rem;">🌱 Analyzing with Groq AI Advisor...</h2>
+            <p style="font-size: 1.05rem; color: #4a7c2c; font-weight: 500; margin-bottom: 8px;">Processing your query ${imageData ? 'and analyzing uploaded crop photo' : ''}...</p>
+            <p style="font-size: 0.9rem; color: #777;">Generating diagnostic analysis and recommendations.</p>
+        </div>
+    `;
+    responseContainer.style.display = 'block';
+    responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    let response;
+    try {
+        const messages = [
+            {
+                role: 'system',
+                content: 'You are an expert AI Agricultural & Crop Health Advisory Assistant. Analyze user queries and uploaded crop/plant images. Respond ONLY with a valid JSON object with keys: "analysis" (string), "diagnosis" (string or null if no disease detected), and "recommendations" (array of actionable bullet point strings).'
+            }
+        ];
+
+        if (imageData) {
+            messages.push({
+                role: 'user',
+                content: [
+                    { type: 'text', text: query || 'Analyze this crop photo and provide agricultural health diagnosis and advisory recommendations.' },
+                    { type: 'image_url', image_url: { url: imageData } }
+                ]
+            });
+        } else {
+            messages.push({
+                role: 'user',
+                content: query || 'Please provide agricultural advice.'
+            });
+        }
+
+        const apiRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'qwen/qwen3.8-27b',
+                response_format: { type: 'json_object' },
+                messages: messages
+            })
+        });
+
+        if (!apiRes.ok) {
+            const errData = await apiRes.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `Groq API Error HTTP ${apiRes.status}`);
+        }
+
+        const data = await apiRes.json();
+        const rawContent = data.choices?.[0]?.message?.content;
+        response = JSON.parse(rawContent);
+
+        if (!response.analysis || !Array.isArray(response.recommendations)) {
+            throw new Error("Invalid response format received from AI");
+        }
+    } catch (error) {
+        console.warn('Groq API call failed or error occurred. Falling back to local advisory engine:', error);
+        response = generateMockResponse(query);
+    }
+
     const responseHTML = `
         <div class="response-card">
             <div class="response-header">
-                <h2>🌱 Analysis Result</h2>
+                <h2>🌱 AI Analysis Result</h2>
                 <span class="response-time">${new Date().toLocaleString()}</span>
             </div>
             <div class="response-content">
@@ -195,10 +258,10 @@ function displayEnquiryResponse(imageData, query) {
             </div>
         </div>
     `;
-    
+
     responseContainer.innerHTML = responseHTML;
     responseContainer.style.display = 'block';
-    
+
     // Scroll to response
     setTimeout(() => {
         responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -208,7 +271,7 @@ function displayEnquiryResponse(imageData, query) {
 function generateMockResponse(query) {
     // Simple keyword-based response generation
     const lowerQuery = query.toLowerCase();
-    
+
     if (lowerQuery.includes('disease') || lowerQuery.includes('leaf') || lowerQuery.includes('spot') || lowerQuery.includes('yellow')) {
         return {
             analysis: "Based on your image and description, we've analyzed the crop condition carefully.",
@@ -276,23 +339,23 @@ function resetPhotoUpload() {
     const preview = document.getElementById('previewImage');
     const uploadBox = document.getElementById('uploadBox');
     const uploadControls = document.getElementById('uploadControls');
-    
+
     if (preview) preview.classList.remove('show');
     if (uploadBox) uploadBox.classList.remove('has-image');
     if (uploadControls) uploadControls.classList.remove('show');
-    
+
     const uploadIcon = uploadBox?.querySelector('.upload-icon');
     const uploadText = uploadBox?.querySelector('.upload-text');
     const uploadHint = uploadBox?.querySelector('.upload-hint');
-    
+
     if (uploadIcon) uploadIcon.style.display = 'block';
     if (uploadText) uploadText.style.display = 'block';
     if (uploadHint) uploadHint.style.display = 'block';
-    
+
     selectedFile = null;
     enquiryImageData = null;
     isPhotoUploaded = false;
-    
+
     const uploadBtn = document.querySelector('.upload-btn');
     if (uploadBtn) {
         uploadBtn.textContent = 'Upload Photo';
@@ -304,7 +367,7 @@ function resetPhotoUpload() {
 function initializeCalendar() {
     const prevBtn = document.getElementById('prev-month');
     const nextBtn = document.getElementById('next-month');
-    
+
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             currentMonth--;
@@ -315,7 +378,7 @@ function initializeCalendar() {
             renderCalendar();
         });
     }
-    
+
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             currentMonth++;
@@ -326,55 +389,55 @@ function initializeCalendar() {
             renderCalendar();
         });
     }
-    
+
     renderCalendar();
 }
 
 function renderCalendar() {
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
-    
+
     const monthYearDisplay = document.getElementById('current-month-year');
     if (monthYearDisplay) {
         monthYearDisplay.textContent = `${monthNames[currentMonth]} ${currentYear}`;
     }
-    
+
     const calendarDates = document.getElementById('calendar-dates');
     if (!calendarDates) return;
-    
+
     calendarDates.innerHTML = '';
-    
+
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const today = new Date();
-    
+
     for (let i = 0; i < firstDay; i++) {
         const emptyDiv = document.createElement('div');
         emptyDiv.className = 'calendar-date';
         emptyDiv.style.visibility = 'hidden';
         calendarDates.appendChild(emptyDiv);
     }
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
         const dateDiv = document.createElement('div');
         dateDiv.className = 'calendar-date';
         dateDiv.textContent = day;
-        
-        if (day === today.getDate() && 
-            currentMonth === today.getMonth() && 
+
+        if (day === today.getDate() &&
+            currentMonth === today.getMonth() &&
             currentYear === today.getFullYear()) {
             dateDiv.classList.add('today');
         }
-        
-        dateDiv.addEventListener('click', function() {
+
+        dateDiv.addEventListener('click', function () {
             document.querySelectorAll('.calendar-date').forEach(d => {
                 d.classList.remove('selected');
             });
-            
+
             this.classList.add('selected');
             showSelectedDateInfo(day, currentMonth, currentYear);
         });
-        
+
         calendarDates.appendChild(dateDiv);
     }
 }
@@ -382,10 +445,10 @@ function renderCalendar() {
 function showSelectedDateInfo(day, month, year) {
     const monthNames = ["January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"];
-    
+
     const selectedDateSection = document.getElementById('selected-date-info');
     const selectedDateDisplay = document.getElementById('selected-date-display');
-    
+
     if (selectedDateSection && selectedDateDisplay) {
         selectedDateDisplay.textContent = `${monthNames[month]} ${day}, ${year}`;
         selectedDateSection.style.display = 'block';
@@ -398,13 +461,13 @@ function updateWeatherDisplay() {
     const conditions = ['Sunny', 'Partly Cloudy', 'Cloudy', 'Rainy'];
     const icons = ['☀️', '⛅', '☁️', '🌧️'];
     const randomIndex = Math.floor(Math.random() * conditions.length);
-    
+
     const temp = Math.floor(Math.random() * 15) + 20;
     const humidity = Math.floor(Math.random() * 40) + 40;
     const wind = Math.floor(Math.random() * 15) + 5;
     const rainfall = Math.floor(Math.random() * 30);
     const uv = Math.floor(Math.random() * 8) + 1;
-    
+
     document.getElementById('weather-icon-display').textContent = icons[randomIndex];
     document.getElementById('temperature-display').textContent = `${temp}°C`;
     document.getElementById('condition-display').textContent = conditions[randomIndex];
@@ -417,19 +480,19 @@ function updateWeatherDisplay() {
 // ===== CROP PLANNING =====
 const cropPlanningForm = document.getElementById('crop-planning-form');
 if (cropPlanningForm) {
-    cropPlanningForm.addEventListener('submit', function(e) {
+    cropPlanningForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        
+
         const crop = document.getElementById('crop-select').value;
         const duration = document.getElementById('duration-select').value;
         const startDate = document.getElementById('start-date').value;
         const landSize = document.getElementById('land-size').value;
-        
+
         if (!crop || !duration || !startDate) {
             alert('Please fill in all required fields');
             return;
         }
-        
+
         generateCropPlan(crop, duration, startDate, landSize);
     });
 }
@@ -437,7 +500,7 @@ if (cropPlanningForm) {
 function generateCropPlan(crop, duration, startDate, landSize) {
     const generatedPlan = document.getElementById('generated-plan');
     if (!generatedPlan) return;
-    
+
     const start = new Date(startDate);
     const durationDays = {
         'short': 75,
@@ -445,20 +508,20 @@ function generateCropPlan(crop, duration, startDate, landSize) {
         'long': 135,
         'very-long': 165
     };
-    
+
     const days = durationDays[duration] || 100;
     const harvestDate = new Date(start);
     harvestDate.setDate(harvestDate.getDate() + days);
-    
+
     document.getElementById('plan-crop').textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
     document.getElementById('plan-duration').textContent = `${days} days`;
-    document.getElementById('plan-start').textContent = start.toLocaleDateString('en-US', { 
-        year: 'numeric', month: 'long', day: 'numeric' 
+    document.getElementById('plan-start').textContent = start.toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric'
     });
-    document.getElementById('plan-harvest').textContent = harvestDate.toLocaleDateString('en-US', { 
-        year: 'numeric', month: 'long', day: 'numeric' 
+    document.getElementById('plan-harvest').textContent = harvestDate.toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric'
     });
-    
+
     generatedPlan.style.display = 'block';
     generatedPlan.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -466,7 +529,7 @@ function generateCropPlan(crop, duration, startDate, landSize) {
 // ===== DOWNLOAD PLAN =====
 const downloadBtn = document.querySelector('.download-plan-btn');
 if (downloadBtn) {
-    downloadBtn.addEventListener('click', function() {
+    downloadBtn.addEventListener('click', function () {
         alert('Plan download feature would be implemented here. In a real application, this would generate a PDF of the crop plan.');
     });
 }
@@ -474,16 +537,16 @@ if (downloadBtn) {
 // ===== OTHER PAGE TABS =====
 function initializeOtherPageTabs() {
     const navPills = document.querySelectorAll('.nav-pill');
-    
+
     navPills.forEach(pill => {
-        pill.addEventListener('click', function() {
+        pill.addEventListener('click', function () {
             const targetSection = this.getAttribute('data-section');
-            
+
             navPills.forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.content-section').forEach(section => {
                 section.classList.remove('active');
             });
-            
+
             this.classList.add('active');
             const targetElement = document.getElementById(targetSection);
             if (targetElement) {
@@ -500,39 +563,39 @@ function initializeMachineryRental() {
     const closeModal = document.querySelector('.close-modal');
     const machineryRentalForm = document.getElementById('machinery-rental-form');
     const machineryPhoto = document.getElementById('machinery-photo');
-    
+
     if (showRentalFormBtn) {
-        showRentalFormBtn.addEventListener('click', function() {
+        showRentalFormBtn.addEventListener('click', function () {
             if (rentalFormModal) {
                 rentalFormModal.style.display = 'flex';
             }
         });
     }
-    
+
     if (closeModal) {
-        closeModal.addEventListener('click', function() {
+        closeModal.addEventListener('click', function () {
             if (rentalFormModal) {
                 rentalFormModal.style.display = 'none';
             }
         });
     }
-    
+
     if (rentalFormModal) {
-        rentalFormModal.addEventListener('click', function(e) {
+        rentalFormModal.addEventListener('click', function (e) {
             if (e.target === rentalFormModal) {
                 rentalFormModal.style.display = 'none';
             }
         });
     }
-    
+
     if (machineryPhoto) {
-        machineryPhoto.addEventListener('change', function() {
+        machineryPhoto.addEventListener('change', function () {
             const file = this.files[0];
             const preview = document.getElementById('machinery-preview');
-            
+
             if (file && preview) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = function (e) {
                     machineryImageData = e.target.result;
                     preview.innerHTML = `<img src="${machineryImageData}" style="max-width: 100%; max-height: 150px; border-radius: 8px; margin-top: 10px;">`;
                 }
@@ -540,11 +603,11 @@ function initializeMachineryRental() {
             }
         });
     }
-    
+
     if (machineryRentalForm) {
-        machineryRentalForm.addEventListener('submit', function(e) {
+        machineryRentalForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            
+
             // Get form data
             const formData = {
                 ownerName: document.getElementById('owner-name').value,
@@ -555,33 +618,33 @@ function initializeMachineryRental() {
                 location: document.getElementById('location').value,
                 image: machineryImageData
             };
-            
+
             // Add machinery card
             addMachineryCard(formData);
-            
+
             // Close modal and reset form
             if (rentalFormModal) {
                 rentalFormModal.style.display = 'none';
             }
-            
+
             this.reset();
             const preview = document.getElementById('machinery-preview');
             if (preview) {
                 preview.innerHTML = '';
             }
             machineryImageData = null;
-            
+
             alert('Success! Your machinery has been added to the rental list.');
         });
     }
-    
+
     // Contact buttons for machinery
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         if (e.target.classList.contains('contact-btn')) {
             const card = e.target.closest('.machinery-card');
             const ownerName = card.querySelector('.owner-detail:nth-child(1) span:nth-child(2)').textContent;
             const phone = card.querySelector('.owner-detail:nth-child(3) span:nth-child(2)').textContent;
-            
+
             alert(`Contact Information:\nName: ${ownerName}\nPhone: ${phone}\n\nYou can call or message them directly.`);
         }
     });
@@ -589,7 +652,7 @@ function initializeMachineryRental() {
 
 function addMachineryCard(data) {
     const machineryGrid = document.querySelector('.machinery-grid');
-    
+
     // Get machinery type display name
     const typeNames = {
         'tractor': 'Tractor',
@@ -601,14 +664,14 @@ function addMachineryCard(data) {
         'rotavator': 'Rotavator',
         'cultivator': 'Cultivator'
     };
-    
+
     const typeName = typeNames[data.machineryType] || data.machineryType;
-    
+
     const newCard = document.createElement('div');
     newCard.className = 'machinery-card';
     newCard.style.opacity = '0';
     newCard.style.transform = 'translateY(20px)';
-    
+
     newCard.innerHTML = `
         <div class="machinery-image-container">
             <img src="${data.image || 'https://via.placeholder.com/350x250?text=' + typeName}" alt="${typeName}">
@@ -637,16 +700,16 @@ function addMachineryCard(data) {
             <button class="contact-btn">Contact Owner</button>
         </div>
     `;
-    
+
     machineryGrid.insertBefore(newCard, machineryGrid.firstChild);
-    
+
     // Animate the new card
     setTimeout(() => {
         newCard.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
         newCard.style.opacity = '1';
         newCard.style.transform = 'translateY(0)';
     }, 100);
-    
+
     // Scroll to the new card
     setTimeout(() => {
         newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -656,7 +719,7 @@ function addMachineryCard(data) {
 // ===== STORAGE CONTACT =====
 const storageContactBtns = document.querySelectorAll('.storage-contact-btn');
 storageContactBtns.forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
         alert('Opening map directions... In a real application, this would open Google Maps with the storage location.');
     });
 });
@@ -664,11 +727,11 @@ storageContactBtns.forEach(btn => {
 // ===== PRODUCT BUY BUTTONS =====
 const buyBtns = document.querySelectorAll('.buy-btn');
 buyBtns.forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
         const card = this.closest('.product-card');
         const productName = card.querySelector('h4').textContent;
         const price = card.querySelector('.current-price').textContent;
-        
+
         alert(`Adding ${productName} to cart at ${price}\n\nIn a real application, this would add the product to your shopping cart.`);
     });
 });
@@ -692,12 +755,12 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 // ===== FORM VALIDATION ENHANCEMENT =====
 const allInputs = document.querySelectorAll('input[required], select[required], textarea[required]');
 allInputs.forEach(input => {
-    input.addEventListener('invalid', function(e) {
+    input.addEventListener('invalid', function (e) {
         e.preventDefault();
         this.classList.add('error');
     });
-    
-    input.addEventListener('input', function() {
+
+    input.addEventListener('input', function () {
         this.classList.remove('error');
     });
 });
@@ -708,7 +771,7 @@ const observerOptions = {
     rootMargin: '0px 0px -50px 0px'
 };
 
-const observer = new IntersectionObserver(function(entries) {
+const observer = new IntersectionObserver(function (entries) {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             entry.target.style.opacity = '1';
